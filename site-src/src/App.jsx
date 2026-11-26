@@ -80,6 +80,40 @@ function Phone({ src, alt, className }) {
   return <div className={'phone ' + (className || '')}><img src={src} alt={alt} draggable="false" /></div>
 }
 
+/* ---------- 3D: tilt toward the cursor ---------- */
+function useTilt(max = 8) {
+  const rx = useSpring(0, { stiffness: 150, damping: 15 }), ry = useSpring(0, { stiffness: 150, damping: 15 })
+  return {
+    style: { rotateX: rx, rotateY: ry, transformPerspective: 1100 },
+    onMouseMove: e => {
+      const r = e.currentTarget.getBoundingClientRect()
+      ry.set(((e.clientX - r.left) / r.width - 0.5) * 2 * max); rx.set(-((e.clientY - r.top) / r.height - 0.5) * 2 * max)
+    },
+    onMouseLeave: () => { rx.set(0); ry.set(0) },
+  }
+}
+function Tilt({ children, className, max }) {
+  const t = useTilt(max)
+  return <motion.div className={className} {...t}>{children}</motion.div>
+}
+
+/* ---------- phone mockups (CSS only) ---------- */
+const StatusIcons = () => (
+  <svg viewBox="0 0 54 12" aria-hidden="true"><path d="M1 9h2v2H1zM5 7h2v4H5zM9 5h2v6H9zM13 3h2v8h-2z" /><path d="M22 4.5a7 7 0 019 0l-1.2 1.3a5.2 5.2 0 00-6.6 0zM24.4 7a3.6 3.6 0 014.2 0L26.5 9.3z" /><rect x="36" y="2" width="15" height="8" rx="2.2" fill="none" stroke="currentColor" strokeWidth="1.2" /><rect x="37.6" y="3.6" width="10" height="4.8" rx="1" /><path d="M52.4 5v2.2" stroke="currentColor" strokeWidth="1.2" /></svg>
+)
+function Device({ kind, src, alt, tag }) {
+  return (
+    <div className={'device device-' + kind}>
+      <span className="btn-a" /><span className="btn-b" />
+      <div className="screen">
+        <div className="statusbar"><span>{kind === 'ios' ? '9:41' : '12:30'}</span><StatusIcons /></div>
+        <img src={src} alt={alt} draggable="false" />
+      </div>
+      {tag && <span className="device-tag mono">{tag}</span>}
+    </div>
+  )
+}
+
 /* ---------- thin progress bar along the top ---------- */
 function ScrollProgress() {
   const { scrollYProgress } = useScroll()
@@ -107,44 +141,57 @@ function Nav() {
   )
 }
 
-/* ---------- hero: giant word behind the floating logo (Aural / Halden), headline rises in ---------- */
+/* ---------- hero: copy on the left, a 3D tableau of an Android phone and an iPhone on the right ---------- */
 function Hero() {
   const ref = useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end start'] })
-  const giantY = useTransform(scrollYProgress, [0, 1], ['0%', '35%'])
-  const giantScale = useTransform(scrollYProgress, [0, 1], [1, 1.12])
-  const logoY = useTransform(scrollYProgress, [0, 1], [0, -160])
-  const fade = useTransform(scrollYProgress, [0, 0.7], [1, 0])
+  const giantY = useTransform(scrollYProgress, [0, 1], ['0%', '40%'])
+  const fade = useTransform(scrollYProgress, [0, 0.8], [1, 0])
+  const spread = useSpring(scrollYProgress, { stiffness: 90, damping: 20 })
+  const andX = useTransform(spread, [0, 1], [0, -90]), iosX = useTransform(spread, [0, 1], [0, 90])
+  const andR = useTransform(spread, [0, 1], [-14, -34]), iosR = useTransform(spread, [0, 1], [16, 36])
+  const lift = useTransform(spread, [0, 1], [0, -60])
   const mx = useMotionValue(0), my = useMotionValue(0)
-  const rx = useSpring(useTransform(my, [-1, 1], [10, -10]), { stiffness: 80, damping: 15 })
-  const ry = useSpring(useTransform(mx, [-1, 1], [-14, 14]), { stiffness: 80, damping: 15 })
-  const tx = useSpring(useTransform(mx, [-1, 1], [-18, 18]), { stiffness: 80, damping: 15 })
+  const gry = useSpring(useTransform(mx, [-1, 1], [-12, 12]), { stiffness: 70, damping: 16 })
+  const grx = useSpring(useTransform(my, [-1, 1], [10, -6]), { stiffness: 70, damping: 16 })
   const onMove = e => { mx.set(e.clientX / window.innerWidth * 2 - 1); my.set(e.clientY / window.innerHeight * 2 - 1) }
   return (
     <section className="hero" id="top" ref={ref} onMouseMove={onMove}>
       <motion.div className="hero-glow" style={{ opacity: fade }} aria-hidden="true" />
-      <motion.h1 className="giant" style={{ y: giantY, scale: giantScale }}
-        initial={{ opacity: 0, letterSpacing: '0.08em' }} animate={{ opacity: 1, letterSpacing: '-0.06em' }}
-        transition={{ duration: 1.6, ease }} aria-label="Daily Streaks">streaks</motion.h1>
-      <motion.div className="hero-logo" style={{ y: logoY, rotateX: rx, rotateY: ry, x: tx }}
-        initial={{ opacity: 0, scale: 0.7, y: 60 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 1.4, ease, delay: 0.3 }}>
-        <motion.div className="sun-glow" aria-hidden="true" animate={{ scale: [1, 1.35, 1], opacity: [0.55, 0.9, 0.55] }} transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }} />
-        <motion.img src="./img/logo-float.webp" alt="Daily Streaks logo: two leaves and a rising sun"
-          animate={{ y: [0, -14, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }} />
-      </motion.div>
-      <motion.div className="hero-foot" style={{ opacity: fade }}>
+      <motion.div className="giant" style={{ y: giantY }} aria-hidden="true"
+        initial={{ opacity: 0, letterSpacing: '0.06em' }} animate={{ opacity: 1, letterSpacing: '-0.06em' }} transition={{ duration: 1.6, ease }}>streaks</motion.div>
+      <div className="hero-grid">
         <div className="hero-copy">
-          <motion.span className="mono" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }}>HABIT TRACKER — ANDROID — V1.3.0</motion.span>
-          <h2 className="hero-title">
-            <Words text="Small steps," delay={0.7} now /><br />
-            <Words text="every day." className="serif-i accent" delay={0.85} now />
-          </h2>
+          <motion.img className="hero-mark" src="./img/logo-small.webp" alt="Daily Streaks logo" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, ease }} />
+          <motion.span className="mono" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>HABIT TRACKER — V1.3.0</motion.span>
+          <h1 className="hero-title">
+            <Words text="Small steps," delay={0.25} now /><br />
+            <Words text="every day." className="serif-i accent" delay={0.4} now />
+          </h1>
+          <motion.p className="hero-lede" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7, duration: 0.8, ease }}>
+            A calm habit tracker that lives only on your phone. No account. No ads. Nothing sent anywhere.
+          </motion.p>
+          <motion.div className="hero-cta" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85, duration: 0.8, ease }}>
+            <DownloadButton />
+            <span className="platforms mono"><b>Android</b> available now<br /><span>iOS coming soon</span></span>
+          </motion.div>
         </div>
-        <motion.div className="hero-cta" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2, duration: 0.8, ease }}>
-          <p>A calm habit tracker that lives only on your phone. No account. No ads. Nothing sent anywhere.</p>
-          <DownloadButton />
+        <motion.div className="tableau" style={{ rotateX: grx, rotateY: gry, opacity: fade }}
+          initial={{ opacity: 0, rotateX: 28, y: 90 }} animate={{ opacity: 1, rotateX: 0, y: 0 }} transition={{ duration: 1.4, ease, delay: 0.2 }}>
+          <motion.div className="dev-wrap dev-and" style={{ x: andX, rotateY: andR, y: lift }}>
+            <motion.div animate={{ y: [0, -12, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}>
+              <Device kind="android" src="./img/theme-dusk.webp" alt="Daily Streaks on an Android phone: the Today screen" tag="Android" />
+            </motion.div>
+          </motion.div>
+          <motion.div className="dev-wrap dev-ios" style={{ x: iosX, rotateY: iosR }}>
+            <motion.div animate={{ y: [0, -16, 0] }} transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 0.8 }}>
+              <Device kind="ios" src="./img/progress.webp" alt="Daily Streaks on an iPhone: the Progress screen" tag="iOS · coming soon" />
+            </motion.div>
+          </motion.div>
+          <motion.span className="float-chip fc-a" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1, y: [0, -8, 0] }} transition={{ opacity: { delay: 1.3 }, scale: { delay: 1.3, type: 'spring' }, y: { duration: 5, repeat: Infinity, ease: 'easeInOut' } }}>🔥 22-day streak</motion.span>
+          <motion.span className="float-chip fc-b" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1, y: [0, 8, 0] }} transition={{ opacity: { delay: 1.5 }, scale: { delay: 1.5, type: 'spring' }, y: { duration: 6, repeat: Infinity, ease: 'easeInOut' } }}>✓ Meditate · done</motion.span>
         </motion.div>
-      </motion.div>
+      </div>
     </section>
   )
 }
@@ -218,7 +265,7 @@ function Demo() {
           <h2 className="big-title"><Words text="Go on," /><br /><Words text="tick one off." className="serif-i accent" delay={0.12} /></h2>
           <p className="lede">This is how every day feels in Daily Streaks. One tap, a little burst, and your streak grows.</p>
         </div>
-        <Reveal className="demo-card" y={50}>
+        <Reveal y={50}><Tilt className="demo-card" max={6}>
           <div className="demo-head">
             <div>
               <span className="demo-day">Thu<i /></span>
@@ -259,7 +306,7 @@ function Demo() {
               </motion.div>
             )}
           </AnimatePresence>
-        </Reveal>
+        </Tilt></Reveal>
       </div>
     </section>
   )
@@ -282,7 +329,7 @@ function Story() {
   const bg = useTransform(scrollYProgress, stops, CHAPTERS.map(c => c.bg))
   const fg = useTransform(scrollYProgress, stops, CHAPTERS.map(c => c.fg))
   const bar = useTransform(scrollYProgress, [0, 1], ['0%', '100%'])
-  const tilt = useTransform(scrollYProgress, [0, 1], [-4, 4])
+  const turn = useTransform(scrollYProgress, [0, 1], [-24, 24])
   const c = CHAPTERS[i]
   return (
     <section id="story" className="story" ref={ref} style={{ height: `${CHAPTERS.length * 70 + 30}vh` }}>
@@ -299,10 +346,10 @@ function Story() {
             </AnimatePresence>
             </div>
           </div>
-          <motion.div className="story-phone" style={{ rotate: tilt }}>
+          <motion.div className="story-phone" style={{ rotateY: turn, transformPerspective: 1400 }}>
             <AnimatePresence initial={false}>
-              <motion.img key={c.img} src={c.img} alt={c.title.join(' ')} initial={{ opacity: 0, scale: 0.94, y: 40 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 1.03, y: -24, transition: { duration: 0.3 } }} transition={{ duration: 0.55, ease }} />
+              <motion.img key={c.img} src={c.img} alt={c.title.join(' ')} initial={{ opacity: 0, rotateY: -80, scale: 0.94 }}
+                animate={{ opacity: 1, rotateY: 0, scale: 1 }} exit={{ opacity: 0, rotateY: 80, scale: 0.94, transition: { duration: 0.3 } }} transition={{ duration: 0.6, ease }} style={{ backfaceVisibility: 'hidden' }} />
             </AnimatePresence>
             <motion.div className="phone-glow" animate={{ backgroundColor: c.ac }} transition={{ duration: 0.8 }} aria-hidden="true" />
             <AnimatePresence initial={false}>
@@ -386,16 +433,19 @@ function Themes() {
   }, [])
   const x = useTransform(scrollYProgress, [0.05, 0.95], [0, -dist])
   const up = useTransform(scrollYProgress, [0, 1], [30, -30]), down = useTransform(scrollYProgress, [0, 1], [-30, 30])
+  const spin = useTransform(scrollYProgress, [0, 1], [32, -32])
   return (
     <section className="themes" ref={ref}>
       <div className="themes-pin">
-        <div className="wrap sec-head">
-          <span className="mono">FOUR THEMES</span>
-          <h2 className="big-title"><Words text="Made to feel" /> <Words text="yours." className="serif-i accent" delay={0.12} /></h2>
+        <div className="wrap">
+          <div className="sec-head">
+            <span className="mono">FOUR THEMES</span>
+            <h2 className="big-title"><Words text="Made to feel" /> <Words text="yours." className="serif-i accent" delay={0.12} /></h2>
+          </div>
         </div>
         <motion.div className="themes-track" ref={track} style={{ x }}>
           {THEMES.map((t, k) => (
-            <motion.figure key={t.name} className="theme-card" style={{ y: k % 2 ? down : up }} whileHover={{ scale: 1.03, rotate: -1 }} transition={{ type: 'spring', stiffness: 200, damping: 18 }}>
+            <motion.figure key={t.name} className="theme-card" style={{ y: k % 2 ? down : up, rotateY: spin, transformPerspective: 1200 }} whileHover={{ scale: 1.03, rotate: -1 }} transition={{ type: 'spring', stiffness: 200, damping: 18 }}>
               <Phone src={t.img} alt={`Today screen in the ${t.name} theme`} />
               <figcaption><b style={{ color: t.c }}>{t.name}</b><span>{t.note}</span></figcaption>
             </motion.figure>
@@ -423,7 +473,7 @@ function Install() {
         </div>
         <ol className="steps">
           {steps.map(([t, d], k) => (
-            <Reveal key={t} delay={k * 0.1} className="step"><span className="mono num">0{k + 1}</span><h3>{t}</h3><p>{d}</p></Reveal>
+            <Reveal key={t} delay={k * 0.1}><Tilt className="step" max={7}><span className="mono num">0{k + 1}</span><h3>{t}</h3><p>{d}</p></Tilt></Reveal>
           ))}
         </ol>
         <Reveal className="sha"><span className="mono">SHA-256</span><code>{SHA}</code><button type="button" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button></Reveal>
