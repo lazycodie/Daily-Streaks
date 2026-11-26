@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   motion, AnimatePresence, MotionConfig, useScroll, useTransform, useSpring,
-  useMotionValue, useInView, animate, useMotionValueEvent, useReducedMotion,
+  useMotionValue, useInView, animate, useMotionValueEvent, useReducedMotion, useVelocity,
 } from 'motion/react'
 import Lenis from 'lenis'
 
@@ -80,6 +80,13 @@ function Phone({ src, alt, className }) {
   return <div className={'phone ' + (className || '')}><img src={src} alt={alt} draggable="false" /></div>
 }
 
+/* ---------- thin progress bar along the top ---------- */
+function ScrollProgress() {
+  const { scrollYProgress } = useScroll()
+  const scaleX = useSpring(scrollYProgress, { stiffness: 120, damping: 30 })
+  return <motion.div className="progress" style={{ scaleX }} aria-hidden="true" />
+}
+
 /* ---------- nav: hides on scroll down, returns on scroll up ---------- */
 function Nav() {
   const { scrollY } = useScroll()
@@ -93,7 +100,7 @@ function Nav() {
     <motion.nav className={'nav' + (solid ? ' solid' : '')} animate={{ y: hidden ? -90 : 0 }} transition={{ duration: 0.35, ease }} aria-label="Main">
       <a className="brand" href="#top"><img src="./img/logo-small.webp" alt="" />Daily Streaks</a>
       <div className="links">
-        <a href="#story">Tour</a><a href="#privacy">Privacy</a><a href="#install">Install</a><a href="#faq">FAQ</a>
+        <a href="#try">Try it</a><a href="#story">Tour</a><a href="#privacy">Privacy</a><a href="#install">Install</a><a href="#faq">FAQ</a>
         <a className="pill" href={APK} download>Download</a>
       </div>
     </motion.nav>
@@ -121,6 +128,7 @@ function Hero() {
         transition={{ duration: 1.6, ease }} aria-label="Daily Streaks">streaks</motion.h1>
       <motion.div className="hero-logo" style={{ y: logoY, rotateX: rx, rotateY: ry, x: tx }}
         initial={{ opacity: 0, scale: 0.7, y: 60 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ duration: 1.4, ease, delay: 0.3 }}>
+        <motion.div className="sun-glow" aria-hidden="true" animate={{ scale: [1, 1.35, 1], opacity: [0.55, 0.9, 0.55] }} transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }} />
         <motion.img src="./img/logo-float.webp" alt="Daily Streaks logo: two leaves and a rising sun"
           animate={{ y: [0, -14, 0] }} transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }} />
       </motion.div>
@@ -145,22 +153,125 @@ function Hero() {
 function Marquee() {
   const items = ['Less scrolling', 'More doing', 'Streaks that stick', 'No account', 'No ads', 'Yours, offline', 'Small steps, every day']
   const row = [...items, ...items]
+  const { scrollY } = useScroll()
+  const vel = useSpring(useVelocity(scrollY), { damping: 40, stiffness: 300 })
+  const skew = useTransform(vel, [-2500, 0, 2500], [6, 0, -6], { clamp: true })
+  const boost = useTransform(vel, [-2500, 0, 2500], [-3, 1, 3], { clamp: true })
+  const x = useMotionValue(0)
+  const reduce = useReducedMotion()
+  useEffect(() => {
+    if (reduce) return
+    let id, last = performance.now()
+    const tick = t => {
+      const dt = (t - last) / 1000; last = t
+      const b = boost.get(); const speed = 3.2 * (Math.abs(b) < 1 ? 1 : Math.abs(b)) // percent of track per second
+      let v = x.get() - speed * dt * (b < 0 ? -1 : 1)
+      if (v <= -50) v += 50; if (v > 0) v -= 50
+      x.set(v); id = requestAnimationFrame(tick)
+    }
+    id = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(id)
+  }, [reduce])
+  const xPct = useTransform(x, v => `${v}%`)
   return (
     <div className="marquee" aria-hidden="true">
-      <motion.div className="track" animate={{ x: ['0%', '-50%'] }} transition={{ duration: 28, ease: 'linear', repeat: Infinity }}>
+      <motion.div className="track" style={{ x: xPct, skewX: skew }}>
         {row.map((t, i) => <span key={i}>{t}<i>✦</i></span>)}
       </motion.div>
     </div>
   )
 }
 
+/* ---------- interactive mini app: try it right here ---------- */
+const DEMO = [
+  { id: 'm', icon: '🧘', name: 'Meditate', streak: 21, c: '#5B8CFF' },
+  { id: 'w', icon: '💧', name: 'Drink 8 glasses of water', streak: 24, c: '#3CC8D8' },
+  { id: 'k', icon: '🚶', name: 'Walk 8,000 steps', streak: 6, c: '#5BC98A' },
+  { id: 'r', icon: '📖', name: 'Read 20 minutes', streak: 9, c: '#9B7BFF' },
+]
+function Burst({ color }) {
+  const dots = Array.from({ length: 14 }, (_, i) => i)
+  return (
+    <span className="burst" aria-hidden="true">
+      {dots.map(i => {
+        const a = (i / dots.length) * Math.PI * 2, d = 34 + (i % 3) * 12
+        return <motion.i key={i} style={{ background: i % 3 ? color : '#E2F27A' }} initial={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+          animate={{ x: Math.cos(a) * d, y: Math.sin(a) * d, scale: 0.2, opacity: 0 }} transition={{ duration: 0.7, ease: 'easeOut' }} />
+      })}
+    </span>
+  )
+}
+function Demo() {
+  const [done, setDone] = useState({})
+  const [burst, setBurst] = useState(null)
+  const count = Object.values(done).filter(Boolean).length
+  const all = count === DEMO.length
+  const toggle = h => {
+    setDone(d => { const v = !d[h.id]; if (v) { setBurst(h.id + Date.now()); try { navigator.vibrate?.(12) } catch (e) {} } return { ...d, [h.id]: v } })
+  }
+  const R = 34, L = 2 * Math.PI * R
+  return (
+    <section className="demo" id="try">
+      <div className="wrap demo-grid">
+        <div className="sec-head demo-copy">
+          <span className="mono">TRY IT RIGHT HERE</span>
+          <h2 className="big-title"><Words text="Go on," /><br /><Words text="tick one off." className="serif-i accent" delay={0.12} /></h2>
+          <p className="lede">This is how every day feels in Daily Streaks. One tap, a little burst, and your streak grows.</p>
+        </div>
+        <Reveal className="demo-card" y={50}>
+          <div className="demo-head">
+            <div>
+              <span className="demo-day">Thu<i /></span>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.p key={all ? 'all' : count} className="demo-sub" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.25 }}>
+                  {all ? 'All done today.' : `${DEMO.length - count} ${DEMO.length - count === 1 ? 'habit' : 'habits'} to go.`}
+                </motion.p>
+              </AnimatePresence>
+            </div>
+            <svg className="ring" viewBox="0 0 80 80" aria-label={`${count} of ${DEMO.length} done`}>
+              <circle cx="40" cy="40" r={R} className="ring-track" />
+              <motion.circle cx="40" cy="40" r={R} className="ring-fill" strokeDasharray={L} animate={{ strokeDashoffset: L * (1 - count / DEMO.length) }} transition={{ type: 'spring', stiffness: 90, damping: 18 }} />
+              <text x="40" y="45" textAnchor="middle">{Math.round(count / DEMO.length * 100)}%</text>
+            </svg>
+          </div>
+          <ul className="demo-list">
+            {DEMO.map(h => {
+              const on = !!done[h.id]
+              return (
+                <motion.li key={h.id} layout className={on ? 'on' : ''} style={{ '--c': h.c }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
+                  <span className="demo-ic">{h.icon}</span>
+                  <span className="demo-name"><b>{h.name}</b>
+                    <small>🔥 <AnimatePresence mode="popLayout" initial={false}><motion.span key={on ? 1 : 0} initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }}>{h.streak + (on ? 1 : 0)}</motion.span></AnimatePresence>-day streak</small>
+                  </span>
+                  <motion.button type="button" className="demo-chk" onClick={() => toggle(h)} whileTap={{ scale: 0.85 }} aria-pressed={on} aria-label={(on ? 'Undo ' : 'Complete ') + h.name}>
+                    <svg viewBox="0 0 24 24"><motion.path d="M5 12.5l4.5 4.5L19 7.5" initial={false} animate={{ pathLength: on ? 1 : 0 }} transition={{ duration: 0.35 }} /></svg>
+                    {burst && burst.startsWith(h.id) && on && <Burst key={burst} color={h.c} />}
+                  </motion.button>
+                </motion.li>
+              )
+            })}
+          </ul>
+          <AnimatePresence>
+            {all && (
+              <motion.div className="demo-done" initial={{ opacity: 0, height: 0, y: 10 }} animate={{ opacity: 1, height: 'auto', y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.45, ease }}>
+                <p><span className="serif-i">A perfect day.</span> Keep it going on your phone.</p>
+                <div className="demo-actions"><DownloadButton /><button type="button" className="demo-reset" onClick={() => setDone({})}>Start over</button></div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </Reveal>
+      </div>
+    </section>
+  )
+}
+
 /* ---------- pinned story: one phone, five chapters, colour-blocked backgrounds (Otto / Honey) ---------- */
 const CHAPTERS = [
-  { n: '01', img: './img/theme-dusk.webp', title: ['Your day,', 'in one timeline.'], body: 'Morning, afternoon, evening. Tap a circle and it is done, with Undo if you slip. A daily focus card keeps your longest streak in view.', bg: '#1C0F09', fg: '#FBEDE3', ac: '#F2A65A' },
-  { n: '02', img: './img/progress.webp', title: ['A trail', 'that climbs.'], body: 'Every check-in moves you up the mountain, toward the next landmark and the next badge.', bg: '#0E1F18', fg: '#EEF5EF', ac: '#F08FA6' },
-  { n: '03', img: './img/year.webp', title: ['Every month.', 'Every year.'], body: 'Step back to any week, month or year. Goal rate, perfect days and your best streak, all in one place.', bg: '#07101F', fg: '#EAF0FA', ac: '#3CC8D8' },
-  { n: '04', img: './img/streaks.webp', title: ['Streaks,', 'remembered.'], body: 'Your longest runs with their dates, and a full-year calendar for every habit.', bg: '#130B08', fg: '#F4EEE8', ac: '#E5653A' },
-  { n: '05', img: './img/settings.webp', title: ['Your data,', 'your way.'], body: 'Export everything to Excel, or copy a backup to move to a new phone. It never leaves unless you take it.', bg: '#0A1712', fg: '#EAF5EE', ac: '#7EE3A8' },
+  { n: '01', chips: ['🔥 7-week streak', '✓ Meditate · done'], img: './img/theme-dusk.webp', title: ['Your day,', 'in one timeline.'], body: 'Morning, afternoon, evening. Tap a circle and it is done, with Undo if you slip. A daily focus card keeps your longest streak in view.', bg: '#1C0F09', fg: '#FBEDE3', ac: '#F2A65A' },
+  { n: '02', chips: ['⛰ 1,580 check-ins', 'Next: High Summit'], img: './img/progress.webp', title: ['A trail', 'that climbs.'], body: 'Every check-in moves you up the mountain, toward the next landmark and the next badge.', bg: '#0E1F18', fg: '#EEF5EF', ac: '#F08FA6' },
+  { n: '03', chips: ['88% goal hit rate', '145 perfect days'], img: './img/year.webp', title: ['Every month.', 'Every year.'], body: 'Step back to any week, month or year. Goal rate, perfect days and your best streak, all in one place.', bg: '#07101F', fg: '#EAF0FA', ac: '#3CC8D8' },
+  { n: '04', chips: ['Best: 53 days', 'Jul 16 – Sep 6'], img: './img/streaks.webp', title: ['Streaks,', 'remembered.'], body: 'Your longest runs with their dates, and a full-year calendar for every habit.', bg: '#130B08', fg: '#F4EEE8', ac: '#E5653A' },
+  { n: '05', chips: ['⇣ Export to Excel', '0 bytes sent'], img: './img/settings.webp', title: ['Your data,', 'your way.'], body: 'Export everything to Excel, or copy a backup to move to a new phone. It never leaves unless you take it.', bg: '#0A1712', fg: '#EAF5EE', ac: '#7EE3A8' },
 ]
 function Story() {
   const ref = useRef(null)
@@ -174,7 +285,7 @@ function Story() {
   const tilt = useTransform(scrollYProgress, [0, 1], [-4, 4])
   const c = CHAPTERS[i]
   return (
-    <section id="story" className="story" ref={ref} style={{ height: `${CHAPTERS.length * 100}vh` }}>
+    <section id="story" className="story" ref={ref} style={{ height: `${CHAPTERS.length * 70 + 30}vh` }}>
       <motion.div className="story-pin" style={{ background: bg, color: fg }}>
         <div className="story-grid">
           <div className="story-text">
@@ -194,6 +305,13 @@ function Story() {
                 animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 1.03, y: -24, transition: { duration: 0.3 } }} transition={{ duration: 0.55, ease }} />
             </AnimatePresence>
             <motion.div className="phone-glow" animate={{ backgroundColor: c.ac }} transition={{ duration: 0.8 }} aria-hidden="true" />
+            <AnimatePresence initial={false}>
+              {c.chips.map((t, k) => (
+                <motion.span key={c.n + k} className={'chip chip-' + k} style={{ borderColor: c.ac }}
+                  initial={{ opacity: 0, scale: 0.6, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.2 } }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.15 + k * 0.12 }}>{t}</motion.span>
+              ))}
+            </AnimatePresence>
           </motion.div>
           <div className="story-rail" aria-hidden="true">
             {CHAPTERS.map((ch, k) => <span key={ch.n} className={k === i ? 'on' : ''} style={k === i ? { background: c.ac } : null} />)}
@@ -218,10 +336,15 @@ function Count({ to }) {
   return <b ref={ref}>{v}</b>
 }
 function Privacy() {
+  const band = useRef(null)
+  const { scrollYProgress: inP } = useScroll({ target: band, offset: ['start end', 'start 0.25'] })
+  const inset = useTransform(inP, [0, 1], [6, 0])
+  const radius = useTransform(inP, [0, 1], [48, 0])
+  const clip = useTransform([inset, radius], ([i, r]) => `inset(0 ${i}% round ${r}px)`)
   const facts = [[0, 'Accounts', 'No sign-up, no email, no password.'], [0, 'Ads & trackers', 'No analytics, no ad SDKs, no crash reporters.'], [0, 'Bytes sent', 'No internet permission at all.'], [1, 'Permission', 'Vibrate. A tiny buzz when you check off a habit.']]
   const spec = [['INTERNET ACCESS', 'NONE'], ['PERMISSIONS', 'VIBRATE'], ['ANALYTICS / ADS', 'NONE'], ['YOUR HABITS', 'ON DEVICE ONLY'], ['CLOUD BACKUP', 'OFF'], ['EXPORT', 'EXCEL / COPY BACKUP'], ['SIZE', '448 KB'], ['REQUIRES', 'ANDROID 8.0+']]
   return (
-    <section id="privacy" className="privacy">
+    <motion.section id="privacy" className="privacy" ref={band} style={{ clipPath: clip }}>
       <div className="wrap">
         <div className="sec-head">
           <span className="mono">PRIVATE BY DESIGN</span>
@@ -234,10 +357,14 @@ function Privacy() {
         </div>
         <Reveal className="spec">
           <div className="spec-head mono"><span>DAILY STREAKS 1.3.0</span><span>SPEC SHEET</span></div>
-          {spec.map(([k, v]) => <div className="spec-row mono" key={k}><span>{k}</span><i /><span>{v}</span></div>)}
+          {spec.map(([k, v], n) => (
+            <motion.div className="spec-row mono" key={k} initial={{ opacity: 0, x: -14 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true, amount: 0.8 }} transition={{ duration: 0.4, delay: n * 0.06 }}>
+              <span>{k}</span><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: 0.6, delay: 0.1 + n * 0.06 }} /><span>{v}</span>
+            </motion.div>
+          ))}
         </Reveal>
       </div>
-    </section>
+    </motion.section>
   )
 }
 
@@ -251,7 +378,14 @@ const THEMES = [
 function Themes() {
   const ref = useRef(null)
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start start', 'end end'] })
-  const x = useTransform(scrollYProgress, [0, 1], ['4%', '-62%'])
+  const track = useRef(null)
+  const [dist, setDist] = useState(0)
+  useLayoutEffect(() => {
+    const m = () => { const t = track.current; if (t) setDist(Math.max(0, t.scrollWidth - window.innerWidth + 40)) }
+    m(); window.addEventListener('resize', m); return () => window.removeEventListener('resize', m)
+  }, [])
+  const x = useTransform(scrollYProgress, [0.05, 0.95], [0, -dist])
+  const up = useTransform(scrollYProgress, [0, 1], [30, -30]), down = useTransform(scrollYProgress, [0, 1], [-30, 30])
   return (
     <section className="themes" ref={ref}>
       <div className="themes-pin">
@@ -259,9 +393,9 @@ function Themes() {
           <span className="mono">FOUR THEMES</span>
           <h2 className="big-title"><Words text="Made to feel" /> <Words text="yours." className="serif-i accent" delay={0.12} /></h2>
         </div>
-        <motion.div className="themes-track" style={{ x }}>
-          {THEMES.map(t => (
-            <motion.figure key={t.name} className="theme-card" whileHover={{ y: -12, rotate: -1 }} transition={{ type: 'spring', stiffness: 200, damping: 18 }}>
+        <motion.div className="themes-track" ref={track} style={{ x }}>
+          {THEMES.map((t, k) => (
+            <motion.figure key={t.name} className="theme-card" style={{ y: k % 2 ? down : up }} whileHover={{ scale: 1.03, rotate: -1 }} transition={{ type: 'spring', stiffness: 200, damping: 18 }}>
               <Phone src={t.img} alt={`Today screen in the ${t.name} theme`} />
               <figcaption><b style={{ color: t.c }}>{t.name}</b><span>{t.note}</span></figcaption>
             </motion.figure>
@@ -357,10 +491,12 @@ export default function App() {
   useLenis(reduce)
   return (
     <MotionConfig reducedMotion="user">
+      <ScrollProgress />
       <Nav />
       <main>
         <Hero />
         <Marquee />
+        <Demo />
         <Story />
         <Privacy />
         <Themes />
