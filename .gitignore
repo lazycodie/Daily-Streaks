@@ -8,3 +8,7 @@ build/
 .gradle/
 *.aab
 .DS_Store
+
+# Node
+node_modules/
+site-src/dist/
