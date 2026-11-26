@@ -2,10 +2,14 @@
 
 A calm, private habit tracker for Android. Streaks, history and four themes. No account, no ads, no tracking.
 
-**Website and download:** https://lazycodie.github.io/Daily-Streaks/
+**Website and download:** https://daily-streaks.vercel.app/
 
 ## What's here
-- `docs/` is the website, published with GitHub Pages: the landing page, the privacy policy (`privacy.html`) and the Android app (`DailyStreaks-1.3.0.apk`).
+| Folder | What it is |
+|---|---|
+| `docs/` | The website (deployed on Vercel via `vercel.json`; also works with GitHub Pages from `/docs`): landing page, privacy policy (`privacy.html`) and the Android app (`DailyStreaks-1.3.0.apk`) |
+| `android/` | Android app source. See [android/README.md](android/README.md) to build it |
+| `web-app/` | The app's screens (one HTML file). The Android build bundles these into the APK |
 
 ## App at a glance
 - Android 8.0 or newer, about 450 KB
