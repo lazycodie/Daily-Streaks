@@ -1,0 +1,10 @@
+# Never commit signing keys or local machine settings
+*.jks
+*.keystore
+keystore.properties
+local.properties
+# Build output
+build/
+.gradle/
+*.aab
+.DS_Store
